@@ -29,79 +29,53 @@ const FullScreenImage = () => {
 
   const panFlag = useSharedValue(false)
 
-  const transTemp = useSharedValue({x: 0, y: 0})
-
-  const prevTranslation = useSharedValue({x: 0, y: 0})
-
-  const prevAdjustedFocal = useSharedValue({x: 0, y: 0})
-  const t1 = useSharedValue({x: 0, y: 0})
-  const t2 = useSharedValue({x: 0, y: 0})
-  const temp = useSharedValue(false)
-  console.log("rendering component")
+  const initialFocal = useSharedValue({x: -1, y: -1})
+  
   //NOTE onEnd callback is fired for pinch gesture first before the pan gesture's
 
   const panGesture = Gesture.Pan()
     .averageTouches(true)
     .onUpdate((event)=> {
+      console.log('on update pan')
       if(panFlag.value){
-        translate.value = {
-          x: event.translationX + prevTranslation.value.x, 
-          y: event.translationY + prevTranslation.value.y
-        }
+        translate.value = {x: event.translationX, y: event.translationY}
       }
 
     })
     .onEnd(()=> {
-      prevTranslation.value = {
-        x: translate.value.x,
-        y: translate.value.y
+      afterPinchTrans.value = {
+        x: afterPinchTrans.value.x + translate.value.x/offsetScale.value,
+        y: afterPinchTrans.value.y + translate.value.y/offsetScale.value
       }
 
+      translate.value = {x: 0, y: 0}
     })
 
   const pinchGesture = Gesture.Pinch()
-    .onStart((event)=> {
-      panFlag.value = true
-
-      prevTranslation.value = {
-        x: translate.value.x + (event.focalX - (prevAdjustedFocal.value.x + window.width/2 + translate.value.x))* (1 - 1/offsetScale.value),
-        y: translate.value.y + (event.focalY - (prevAdjustedFocal.value.y + window.height/2 + translate.value.y))* (1 - 1/offsetScale.value)
-      }
-      translate.value = {...prevTranslation.value}
-    })
+    .onStart(()=> panFlag.value = true)
     .onUpdate((event)=> {
       adjustedFocal.value = {
-        x: (event.focalX - (window.width/2 + translate.value.x)),
-        y: (event.focalY - (window.height/2 + translate.value.y)),
+        x: (event.focalX - (window.width/2 + translate.value.x + afterPinchTrans.value.x * offsetScale.value))/offsetScale.value,
+        y : (event.focalY - (window.height/2 + translate.value.y + afterPinchTrans.value.y * offsetScale.value))/offsetScale.value  
       }
-
-      pinchScale.value = event.scale * offsetScale.value
-
+      pinchScale.value = event.scale
     })
     .onEnd(()=> {
-      offsetScale.value = pinchScale.value
-      prevAdjustedFocal.value = {...adjustedFocal.value}
+      offsetScale.value = offsetScale.value * pinchScale.value
+
       if(offsetScale.value <= 1){
-        translate.value = {x: 0, y: 0}
-        offsetScale.value = 1;
+        panFlag.value= false
+        afterPinchTrans.value = {x: 0, y: 0}
         pinchScale.value = 1
-        panFlag.value = false
+        offsetScale.value = 1
+        translate.value = {x: 0, y: 0}
+      }else{
+        afterPinchTrans.value = {
+          x:afterPinchTrans.value.x/pinchScale.value - (adjustedFocal.value.x - adjustedFocal.value.x/pinchScale.value),
+          y:afterPinchTrans.value.y/pinchScale.value - (adjustedFocal.value.y - adjustedFocal.value.y/pinchScale.value)   
+        }
+        pinchScale.value = 1
       }
-      // prevAdjustedFocal.value = {
-      //   ...adjustedFocal.value
-      // }
-      // if(offsetScale.value <= 1){
-      //   panFlag.value= false
-      //   afterPinchTrans.value = {x: 0, y: 0}
-      //   pinchScale.value = 1
-      //   offsetScale.value = 1
-      // }else{
-      //   afterPinchTrans.value = {
-      //     x:afterPinchTrans.value.x/pinchScale.value - (adjustedFocal.value.x - adjustedFocal.value.x/pinchScale.value),
-      //     y:afterPinchTrans.value.y/pinchScale.value - (adjustedFocal.value.y - adjustedFocal.value.y/pinchScale.value)   
-      //   }
-      //   pinchScale.value = 1
-      // }
     })
 
   const composed = Gesture.Simultaneous(
@@ -112,10 +86,14 @@ const FullScreenImage = () => {
     return {
       transform: 
         [
-          
           {translateX : translate.value.x},
           {translateY: translate.value.y},
-
+          
+          {scale: offsetScale.value},
+          
+          {translateX: afterPinchTrans.value.x},
+          {translateY: afterPinchTrans.value.y},
+          
           {translateX: adjustedFocal.value.x },
           {translateY: adjustedFocal.value.y },
           
@@ -123,7 +101,6 @@ const FullScreenImage = () => {
           
           {translateX: -1 * adjustedFocal.value.x},
           {translateY: -1 * adjustedFocal.value.y},
-
         ]
     }
   })
